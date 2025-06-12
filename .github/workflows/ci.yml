@@ -1,56 +1,17 @@
-name: CI and Release
-
-on:
-  push:
-    branches: [master]
-    tags: ['v*']
-  pull_request:
-    branches: [master]
-
-jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-    - uses: actions/checkout@v4
-    
-    # Установка CMake (кроссплатформенный способ)
-    - name: Install CMake
-      uses: lukka/get-cmake@latest
-      
-    # Установка зависимостей
-    - name: Install dependencies
-      shell: bash
-      run: |
-        if [ "${{ runner.os }}" = "Linux" ]; then
-          sudo apt-get update
-          sudo apt-get install -y build-essential
-        elif [ "${{ runner.os }}" = "Windows" ]; then
-          choco install wixtoolset -y
-        fi
-
-    - name: Configure project
-      run: cmake -B build
-      
-    - name: Build project
-      run: cmake --build build --config Release
-
-  package:
-    needs: build
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        include:
-          - os: ubuntu-latest
-            generator: "DEB;RPM"
-          - os: windows-latest
-            generator: "WIX"
-          - os: macos-latest
-            generator: "DragNDrop"
-    steps:
+package:
+  needs: build
+  runs-on: ${{ matrix.os }}
+  strategy:
+    matrix:
+      os: [ubuntu-latest, windows-latest, macos-latest]
+      include:
+        - os: ubuntu-latest
+          generator: "DEB;RPM"
+        - os: windows-latest
+          generator: "WIX"
+        - os: macos-latest
+          generator: "DragNDrop"
+  steps:
     - uses: actions/checkout@v4
     
     - name: Install CMake
@@ -80,24 +41,17 @@ jobs:
     - name: Build packages
       run: cmake --build build --target package
       
-    # Обновленная версия upload-artifact
-    - uses: actions/upload-artifact@v4
+    # Улучшенная загрузка артефактов
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.os }}-packages
-        path: build/*
-
-  release:
-    needs: package
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/download-artifact@v4
-      with:
-        path: artifacts
-        
-    - name: Create Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: |
-          artifacts/**/*
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        path: |
+          build/*.deb
+          build/*.rpm
+          build/*.msi
+          build/*.dmg
+          build/*.tar.gz
+          build/*.zip
+        if-no-files-found: error
+        retention-days: 1
