@@ -3,9 +3,12 @@ name: CI and Release
 on:
   push:
     branches: [master]
-    tags: ['v*']
+    tags: ['v*.*.*']  # Более строгий формат тегов
   pull_request:
     branches: [master]
+
+env:
+  VERSION: ${{ github.ref_name }}
 
 jobs:
   build:
@@ -20,7 +23,6 @@ jobs:
       uses: lukka/get-cmake@latest
       
     - name: Install dependencies
-      shell: bash
       run: |
         if [ "${{ runner.os }}" = "Linux" ]; then
           sudo apt-get update
@@ -30,7 +32,7 @@ jobs:
         fi
 
     - name: Configure project
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DVERSION_OVERRIDE=${{ env.VERSION }}
       
     - name: Build project
       run: cmake --build build --config Release
@@ -43,7 +45,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         include:
           - os: ubuntu-latest
-            generator: "DEB;RPM"
+            generator: "DEB"
           - os: windows-latest
             generator: "NSIS"
           - os: macos-latest
@@ -51,48 +53,31 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    # Кроссплатформенная очистка build-директории
-    - name: Clean build directory
+    - name: Clean build (Linux/macOS)
       if: runner.os != 'Windows'
-      run: |
-        rm -rf build/*
-        mkdir -p build
+      run: rm -rf build/* && mkdir -p build
       shell: bash
 
-    - name: Clean build directory (Windows)
+    - name: Clean build (Windows)
       if: runner.os == 'Windows'
-      run: |
-        Remove-Item -Path "build\*" -Recurse -Force -ErrorAction SilentlyContinue
-        New-Item -ItemType Directory -Path "build" -Force | Out-Null
+      run: Remove-Item -Path "build\*" -Recurse -Force -ErrorAction SilentlyContinue; New-Item -ItemType Directory -Path "build" -Force | Out-Null
       shell: pwsh
 
-    - name: Install packaging tools
-      shell: bash
-      run: |
-        if [ "${{ runner.os }}" = "Linux" ]; then
-          sudo apt-get update
-          sudo apt-get install -y rpm
-        elif [ "${{ runner.os }}" = "Windows" ]; then
-          choco install nsis -y
-        fi
-
     - name: Configure CPack
-      run: cmake -B build -DCPACK_GENERATOR="${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release
+      run: cmake -B build -DCPACK_GENERATOR="${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release -DVERSION_OVERRIDE=${{ env.VERSION }}
       
-    - name: Build packages
+    - name: Build package
       run: cmake --build build --target package
       
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.os }}-packages
+        name: ${{ matrix.os }}-package
         path: |
           build/*.deb
-          build/*.rpm
           build/*.exe
           build/*.dmg
           build/*.tar.gz
-          build/*.zip
         if-no-files-found: warn
         retention-days: 1
 
@@ -104,18 +89,20 @@ jobs:
     - uses: actions/download-artifact@v4
       with:
         path: artifacts
-        pattern: '*-packages/*'
+        pattern: '*-package/*'
         merge-multiple: true
         
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
+        tag_name: ${{ github.ref }}
         files: |
           artifacts/*.deb
-          artifacts/*.rpm
           artifacts/*.exe
           artifacts/*.dmg
           artifacts/*.tar.gz
-          artifacts/*.zip
+        draft: false
+        prerelease: false
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
