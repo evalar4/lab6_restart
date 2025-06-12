@@ -3,7 +3,7 @@ name: CI and Release
 on:
   push:
     branches: [master]
-    tags: ['v*.*.*']
+    tags: ['v*']  # Упрощённый формат тегов
   pull_request:
     branches: [master]
 
@@ -15,93 +15,46 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
     - uses: actions/checkout@v3
-    
-    # Универсальная установка CMake
     - name: Install CMake
       uses: lukka/get-cmake@latest
-      
-    # Платформозависимые зависимости
-    - name: Install dependencies
-      shell: bash
-      run: |
-        if [ "${{ runner.os }}" = "Linux" ]; then
-          sudo apt-get update
-          sudo apt-get install -y build-essential
-        elif [ "${{ runner.os }}" = "Windows" ]; then
-          # Используем правильное имя пакета WiX
-          choco install wixtoolset -y
-        fi
-
-    - name: Configure project
+    - name: Configure
       run: cmake -B build
-      
-    - name: Build project
+    - name: Build
       run: cmake --build build --config Release
 
   package:
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ${{ matrix.os }}
     needs: build
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        include:
-          - os: ubuntu-latest
-            generator: "DEB;RPM"
-          - os: windows-latest
-            generator: "WIX"
-          - os: macos-latest
-            generator: "DragNDrop"
     steps:
     - uses: actions/checkout@v3
-    
-    # Универсальная установка CMake
-    - name: Install CMake
-      uses: lukka/get-cmake@latest
-      
-    - name: Set version
-      shell: bash
-      run: |
-        VERSION=${GITHUB_REF#refs/tags/v}
-        echo "VERSION_OVERRIDE=$VERSION" >> $GITHUB_ENV
-      
-    - name: Install packaging tools
-      shell: bash
+    - name: Install tools
       run: |
         if [ "${{ runner.os }}" = "Linux" ]; then
-          sudo apt-get update
           sudo apt-get install -y rpm
         elif [ "${{ runner.os }}" = "Windows" ]; then
-          # Используем правильное имя пакета WiX
           choco install wixtoolset -y
         fi
-
-    - name: Configure CMake
+    - name: Configure CPack
       run: cmake -B build -DCPACK_GENERATOR="${{ matrix.generator }}"
-      env:
-        VERSION_OVERRIDE: ${{ env.VERSION }}
-        
-    - name: Build packages
+    - name: Build package
       run: cmake --build build --target package
-      
     - uses: actions/upload-artifact@v3
       with:
-        name: ${{ matrix.os }}-packages
+        name: ${{ matrix.os }}-package
         path: build/*
 
   release:
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
     needs: package
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/download-artifact@v3
       with:
         path: artifacts
-        
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
+    - uses: softprops/action-gh-release@v1
       with:
-        files: |
-          artifacts/**/*
+        files: artifacts/**/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
