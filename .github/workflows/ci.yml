@@ -54,9 +54,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    # Кроссплатформенная очистка build-директории
     - name: Clean build directory
+      shell: bash
       run: |
-        rm -rf build/*
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          if [ -d "build" ]; then
+            rm -r -fo build/*
+          fi
+        else
+          rm -rf build/*
+        fi
         mkdir -p build
 
     - name: Install packaging tools
@@ -88,7 +96,6 @@ jobs:
           build/*.zip
         if-no-files-found: error
         retention-days: 1
-        compression-level: 1
 
   release:
     needs: package
@@ -111,6 +118,5 @@ jobs:
           artifacts/*.dmg
           artifacts/*.tar.gz
           artifacts/*.zip
-        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
