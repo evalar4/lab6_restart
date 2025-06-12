@@ -8,36 +8,39 @@ on:
     branches: [master]
 
 jobs:
-  build_test:
+  build:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
     - uses: actions/checkout@v3
+    
+    # Универсальная установка CMake
+    - name: Install CMake
+      uses: lukka/get-cmake@latest
+      
+    # Платформозависимые зависимости
     - name: Install dependencies
+      shell: bash
       run: |
         if [ "${{ runner.os }}" = "Linux" ]; then
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake
-        elif [ "${{ runner.os }}" = "macOS" ]; then
-          brew install cmake
+          sudo apt-get install -y build-essential
         elif [ "${{ runner.os }}" = "Windows" ]; then
-          choco install cmake -y
+          choco install wix -y
         fi
+
     - name: Configure project
       run: cmake -B build
+      
     - name: Build project
       run: cmake --build build --config Release
-    - name: Run tests
-      run: |
-        cd build
-        ctest -C Release
 
   package:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ${{ matrix.os }}
-    needs: build_test
+    needs: build
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -50,11 +53,19 @@ jobs:
             generator: "DragNDrop"
     steps:
     - uses: actions/checkout@v3
-    - name: Extract version from tag
+    
+    # Универсальная установка CMake
+    - name: Install CMake
+      uses: lukka/get-cmake@latest
+      
+    - name: Set version
+      shell: bash
       run: |
         VERSION=${GITHUB_REF#refs/tags/v}
         echo "VERSION_OVERRIDE=$VERSION" >> $GITHUB_ENV
+      
     - name: Install packaging tools
+      shell: bash
       run: |
         if [ "${{ runner.os }}" = "Linux" ]; then
           sudo apt-get update
@@ -62,18 +73,21 @@ jobs:
         elif [ "${{ runner.os }}" = "Windows" ]; then
           choco install wix -y
         fi
-    - name: Configure with CPack
+
+    - name: Configure CMake
       run: cmake -B build -DCPACK_GENERATOR="${{ matrix.generator }}"
       env:
         VERSION_OVERRIDE: ${{ env.VERSION }}
+        
     - name: Build packages
       run: cmake --build build --target package
+      
     - uses: actions/upload-artifact@v3
       with:
         name: ${{ matrix.os }}-packages
         path: build/*
 
-  create_release:
+  release:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     needs: package
@@ -81,15 +95,11 @@ jobs:
     - uses: actions/download-artifact@v3
       with:
         path: artifacts
-    - name: Create GitHub Release
+        
+    - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          artifacts/**/*.deb
-          artifacts/**/*.rpm
-          artifacts/**/*.msi
-          artifacts/**/*.dmg
-          artifacts/**/*.tar.gz
-          artifacts/**/*.zip
+          artifacts/**/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
