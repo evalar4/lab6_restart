@@ -33,7 +33,7 @@ jobs:
         fi
 
     - name: Configure project
-      run: cmake -B build
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
       
     - name: Build project
       run: cmake --build build --config Release
@@ -48,19 +48,18 @@ jobs:
           - os: ubuntu-latest
             generator: "DEB;RPM"
           - os: windows-latest
-            generator: "WIX"
+            generator: "NSIS"  # Используем NSIS вместо WIX
           - os: macos-latest
             generator: "DragNDrop"
     steps:
     - uses: actions/checkout@v4
     
-    # Кроссплатформенная очистка build-директории
     - name: Clean build directory
       shell: bash
       run: |
         if [ "${{ runner.os }}" = "Windows" ]; then
           if [ -d "build" ]; then
-            rm -r -fo build/*
+            rm -r -f build/*
           fi
         else
           rm -rf build/*
@@ -74,11 +73,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y rpm
         elif [ "${{ runner.os }}" = "Windows" ]; then
-          choco install wixtoolset -y
+          choco install nsis -y  # Устанавливаем NSIS вместо WiX
         fi
 
     - name: Configure CPack
-      run: cmake -B build -DCPACK_GENERATOR="${{ matrix.generator }}"
+      run: cmake -B build -DCPACK_GENERATOR="${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release
       
     - name: Build packages
       run: cmake --build build --target package
@@ -90,7 +89,7 @@ jobs:
         path: |
           build/*.deb
           build/*.rpm
-          build/*.msi
+          build/*.exe  # NSIS генерирует .exe установщик
           build/*.dmg
           build/*.tar.gz
           build/*.zip
@@ -114,7 +113,7 @@ jobs:
         files: |
           artifacts/*.deb
           artifacts/*.rpm
-          artifacts/*.msi
+          artifacts/*.exe
           artifacts/*.dmg
           artifacts/*.tar.gz
           artifacts/*.zip
