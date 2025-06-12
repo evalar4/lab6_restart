@@ -57,16 +57,13 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    # Универсальная очистка для всех ОС
     - name: Clean build directory
       run: |
-        # Кроссплатформенная очистка
-        if [ "${{ runner.os }}" = "Windows" ]; then
-          Remove-Item -Path "build\*" -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Path "build" -Force | Out-Null
-        else
-          rm -rf build/*
-          mkdir -p build
+        if [ -d "build" ]; then
+          find build -mindepth 1 -delete
         fi
+        mkdir -p build
       shell: bash
 
     - name: Install packaging tools
@@ -100,9 +97,8 @@ jobs:
     needs: package
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
-    # КРИТИЧЕСКИ ВАЖНЫЕ ПРАВА
     permissions:
-      contents: write
+      contents: write  # Критически важное разрешение
       
     steps:
     - uses: actions/download-artifact@v4
@@ -111,17 +107,13 @@ jobs:
         pattern: '*-packages'
         merge-multiple: true
         
-    # Подготовка файлов для релиза
     - name: Prepare release files
       run: |
-        echo "Содержимое artifacts:"
-        ls -R artifacts
-        
         # Создаем директорию для релизных файлов
         mkdir release_files
         
-        # Копируем все найденные пакеты
-        find artifacts -type f \( -iname "*.deb" -o -iname "*.rpm" -o -iname "*.exe" -o -iname "*.dmg" -o -iname "*.tar.gz" -o -iname "*.zip" \) -exec cp {} release_files/ \;
+        # Копируем все найденные пакеты (рекурсивный поиск)
+        find artifacts -type f \( -name "*.deb" -o -name "*.rpm" -o -name "*.exe" -o -name "*.dmg" -o -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release_files/ \;
         
         echo "Файлы для релиза:"
         ls -lh release_files
@@ -133,11 +125,11 @@ jobs:
         tag_name: ${{ github.ref_name }}
         name: Release ${{ github.ref_name }}
         body: |
-          Автоматический релиз ${{ github.ref_name }}
-          Содержит пакеты для:
-          - Linux (.deb, .rpm)
-          - Windows (.exe)
-          - macOS (.dmg)
+          Automated release ${{ github.ref_name }}
+          Packages included:
+          - DEB/RPM for Linux
+          - EXE for Windows
+          - DMG for macOS
         files: release_files/*
         draft: false
         prerelease: false
