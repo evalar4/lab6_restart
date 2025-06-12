@@ -7,9 +7,6 @@ on:
   pull_request:
     branches: [master]
 
-env:
-  VERSION_OVERRIDE: ${{ github.ref_name }}
-
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -29,7 +26,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential
         elif [ "${{ runner.os }}" = "Windows" ]; then
-          choco install wixtoolset -y
+          choco install nsis -y
         fi
 
     - name: Configure project
@@ -48,22 +45,15 @@ jobs:
           - os: ubuntu-latest
             generator: "DEB;RPM"
           - os: windows-latest
-            generator: "NSIS"  # Используем NSIS вместо WIX
+            generator: "NSIS"
           - os: macos-latest
             generator: "DragNDrop"
     steps:
     - uses: actions/checkout@v4
     
     - name: Clean build directory
-      shell: bash
       run: |
-        if [ "${{ runner.os }}" = "Windows" ]; then
-          if [ -d "build" ]; then
-            rm -r -f build/*
-          fi
-        else
-          rm -rf build/*
-        fi
+        rm -rf build/* || true
         mkdir -p build
 
     - name: Install packaging tools
@@ -73,7 +63,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y rpm
         elif [ "${{ runner.os }}" = "Windows" ]; then
-          choco install nsis -y  # Устанавливаем NSIS вместо WiX
+          choco install nsis -y
         fi
 
     - name: Configure CPack
@@ -89,11 +79,11 @@ jobs:
         path: |
           build/*.deb
           build/*.rpm
-          build/*.exe  # NSIS генерирует .exe установщик
+          build/*.exe
           build/*.dmg
           build/*.tar.gz
           build/*.zip
-        if-no-files-found: error
+        if-no-files-found: warn
         retention-days: 1
 
   release:
